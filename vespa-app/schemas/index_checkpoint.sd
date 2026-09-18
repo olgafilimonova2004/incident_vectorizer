@@ -1,0 +1,5 @@
+schema index_checkpoint {
+    document index_checkpoint {
+        field updated_at_jira type string { indexing: summary }
+    }
+}
