@@ -16,7 +16,7 @@ schema incident {
         field updated_at_jira type string { indexing: summary }
         field updated_at_db type string { indexing: summary }
         field embedding_model_version type string { indexing: summary }
-        field embedding type tensor<float>(x[2560]) {
+        field embedding type tensor<float>(x[2048]) {
             indexing: attribute | index | summary
             attribute { distance-metric: angular }
             index {
@@ -32,7 +32,7 @@ schema incident {
         first-phase { expression: bm25(text) }
     }
     rank-profile semantic {
-        inputs { query(q_embedding) tensor<float>(x[2560]) }
+        inputs { query(q_embedding) tensor<float>(x[2048]) }
         first-phase { expression: closeness(field, embedding) }
     }
 }

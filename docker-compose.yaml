@@ -1,24 +1,26 @@
 services:
   vespa:
     image: vespaengine/vespa:8
-    hostname: vespa
     volumes:
       - vespa-data:/opt/vespa/var
       - ./vespa-app:/app:ro
-    networks: [vespa-private]
+    ports:
+      - "8083:8080" # API, убрать в проде
+      - "19072:19071" # Config Server, убрать в проде
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:19071/state/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 30
     mem_limit: 4g
+
   api-gateway:
     image: incident-vectorizer:local
     build: .
-    ports: ["127.0.0.1:8001:8001"]
-    env_file: ${INCIDENT_ENV_FILE:-.env}
-    extra_hosts: ["host.docker.internal:host-gateway"]
-    networks: [default, vespa-private]
+    ports: 
+      - 8001:8001
+    env_file: 
+      - ${INCIDENT_ENV_FILE:-.env}
     depends_on:
       vespa:
         condition: service_healthy
@@ -27,8 +29,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+
 volumes:
   vespa-data:
-networks:
-  vespa-private:
-    internal: true
