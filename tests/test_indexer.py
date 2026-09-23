@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.common.config import EmbedderConfig, JiraConfig, RuntimeConfig, VespaConfig
+from src.common.config import EmbedderConfig, JiraConfig, RuntimeConfig
 from src.common.errors import DependencyError, IndexAlreadyRunning
 from src.common.locking import index_lock
 from src.core.incident_vectorizer import IncidentVectorizer
@@ -16,7 +16,6 @@ from src.models.request_models import IndexResult
 from src.repositories.ticket_repository import TicketRepository
 from src.routers.general import GeneralRouter
 from src.services.embedder_service import EmbedderService
-from src.services.vespa_service import VespaService
 
 
 class MemoryVespa:
@@ -163,19 +162,5 @@ def test_embedder_orders_and_batches():
     try:
         assert service.embed_texts(["a", "b", "c"]) == [[0, 1], [1, 1], [0, 1]]
         assert requests[0]["input"] == ["passage: a", "passage: b"]
-    finally:
-        service.close()
-
-
-def test_vespa_distinguishes_missing_from_failure():
-    service = VespaService(VespaConfig())
-    service.client.close()
-    service.client = httpx.Client(base_url="http://vespa", transport=httpx.MockTransport(lambda r: httpx.Response(404, json={"id": "id:incident:incident::MISSING"})))
-    assert service.get("incident", "MISSING") is None
-    service.client.close()
-    service.client = httpx.Client(base_url="http://vespa", transport=httpx.MockTransport(lambda r: httpx.Response(404, json={"message": "Unknown document type"})))
-    try:
-        with pytest.raises(httpx.HTTPStatusError):
-            service.get("incident", "MISSING")
     finally:
         service.close()

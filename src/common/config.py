@@ -23,9 +23,9 @@ class EmbedderConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="INCIDENT_EMBEDDER_", env_file=".env", extra="ignore")
     base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8000/v1")
     api_key: SecretStr = SecretStr("")
-    model: str = "drawais/Qwen3-Embedding-4B-AWQ-INT4"
+    model: str = ""
     dimensions: int = Field(default=2560, gt=0)
-    prefix: str = "passage: "
+    prefix: str = ""
     batch_size: int = Field(default=32, gt=0)
     timeout: float = Field(default=120, gt=0)
 

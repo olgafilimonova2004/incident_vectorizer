@@ -1,41 +1,54 @@
+from contextlib import ExitStack
 from typing import Any
-from urllib.parse import quote
 
-import httpx
+from requests import Session
+from vespa.application import Vespa
 
 from src.common.config import VespaConfig
 from src.common.errors import DependencyError
 
 
+class _TimeoutSession(Session):
+    def __init__(self, timeout: float):
+        super().__init__()
+        self.timeout = timeout
+
+    def request(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("timeout", self.timeout)
+        return super().request(*args, **kwargs)
+
+
 class VespaService:
     def __init__(self, config: VespaConfig):
-        self.client = httpx.Client(base_url=str(config.url).rstrip("/"), timeout=config.timeout)
-
-    def _path(self, schema: str, doc_id: str) -> str:
-        return f"/document/v1/incident/{schema}/docid/{quote(doc_id, safe='')}"
+        app = Vespa(url=str(config.url).rstrip("/"))
+        with ExitStack() as resources:
+            # Pyvespa forwards method kwargs as Vespa query parameters, so set
+            # the network timeout on its underlying session instead.
+            session = resources.enter_context(_TimeoutSession(config.timeout))
+            self.client = resources.enter_context(app.syncio(session=session))
+            self._resources = resources.pop_all()
 
     def get(self, schema: str, doc_id: str) -> dict[str, Any] | None:
-        response = self.client.get(self._path(schema, doc_id))
+        response = self.client.get_data(schema=schema, data_id=doc_id, namespace="incident")
         if response.status_code == 404:
             # An undeployed document type must not be treated as an absent document.
-            payload = response.json()
+            payload = response.json
             if "id" in payload and "message" not in payload:
                 return None
-        response.raise_for_status()
-        return response.json()["fields"]
+        if not response.is_successful():
+            raise DependencyError("Vespa не смогла получить документ")
+        return response.json["fields"]
 
     def put(self, schema: str, doc_id: str, fields: dict[str, Any]) -> None:
-        response = self.client.post(self._path(schema, doc_id), json={"fields": fields})
-        response.raise_for_status()
-        if "id" not in response.json():
+        response = self.client.feed_data_point(schema=schema, data_id=doc_id, fields=fields, namespace="incident")
+        if not response.is_successful() or "id" not in response.json:
             raise DependencyError("Vespa не подтвердила запись документа")
 
     def ready(self) -> None:
         for schema in ("incident", "index_checkpoint"):
-            response = self.client.post("/search/", json={"yql": f"select * from {schema} where true", "hits": 0})
-            response.raise_for_status()
-            if response.json().get("root", {}).get("errors") or response.json().get("errors"):
+            response = self.client.query(body={"yql": f"select * from {schema} where true", "hits": 0})
+            if not response.is_successful() or response.json.get("root", {}).get("errors") or response.json.get("errors"):
                 raise DependencyError("Схемы Vespa не готовы")
 
     def close(self) -> None:
-        self.client.close()
+        self._resources.close()
