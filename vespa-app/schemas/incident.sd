@@ -35,4 +35,8 @@ schema incident {
         inputs { query(q_embedding) tensor<float>(x[2048]) }
         first-phase { expression: closeness(field, embedding) }
     }
+    rank-profile weighted {
+        inputs { query(q_embedding) tensor<float>(x[2048]) }
+        first-phase { expression: 0.5 * closeness(field, embedding) + 0.5 * bm25(text)}
+    }
 }

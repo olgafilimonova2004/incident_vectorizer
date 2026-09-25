@@ -10,6 +10,7 @@ def normalize_text(value: str | None) -> str:
     if not value:
         return ""
     value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = re.sub(r"![^\s!]+!", "", value)
     return "\n".join(line.rstrip() for line in value.split("\n")).strip()
 
 
