@@ -21,11 +21,11 @@ def test_cli_result_and_close(monkeypatch, capsys, failed, code):
     container = Mock()
     container.get.return_value.run.return_value = IndexResult(processed=1, failed=failed)
     monkeypatch.setattr(cli, "initialize_container", lambda: container)
-    monkeypatch.setattr("sys.argv", ["jira-index", "--full"])
+    monkeypatch.setattr("sys.argv", ["jira-index"])
     with pytest.raises(SystemExit) as exc:
         cli.index_main()
     assert exc.value.code == code
-    container.get.return_value.run.assert_called_once_with(full=True)
+    container.get.return_value.run.assert_called_once_with()
     container.close.assert_called_once()
     assert '"processed":1' in capsys.readouterr().out
 
@@ -39,3 +39,28 @@ def test_cli_error_is_nonzero_and_closes(monkeypatch):
         cli.index_main()
     assert exc.value.code == 1
     container.close.assert_called_once()
+
+
+def test_jira_full_option_removed(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["jira-index", "--full"])
+    with pytest.raises(SystemExit) as exc:
+        cli.index_main()
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("entrypoint", [cli.jira_index_force_main, cli.confluence_index_force_main])
+@pytest.mark.parametrize("failed,error,code", [(0, False, 0), (1, False, 1), (0, True, 1)])
+def test_force_commands(monkeypatch, capsys, entrypoint, failed, error, code):
+    container = Mock()
+    container.get.return_value.run.return_value = IndexResult(processed=1, changed=1-failed, failed=failed)
+    if error:
+        container.get.return_value.run.side_effect = RuntimeError("private")
+    monkeypatch.setattr(cli, "initialize_container", lambda: container)
+    monkeypatch.setattr("sys.argv", ["index-force"])
+    with pytest.raises(SystemExit) as exc:
+        entrypoint()
+    assert exc.value.code == code
+    container.get.return_value.run.assert_called_once_with(force=True)
+    container.close.assert_called_once()
+    if not error:
+        assert '"processed":1' in capsys.readouterr().out

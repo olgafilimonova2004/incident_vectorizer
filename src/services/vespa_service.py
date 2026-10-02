@@ -45,7 +45,7 @@ class VespaService:
             raise DependencyError("Vespa не подтвердила запись документа")
 
     def ready(self) -> None:
-        for schema in ("incident", "index_checkpoint"):
+        for schema in ("incident", "confluence_page"):
             response = self.client.query(body={"yql": f"select * from {schema} where true", "hits": 0})
             if not response.is_successful() or response.json.get("root", {}).get("errors") or response.json.get("errors"):
                 raise DependencyError("Схемы Vespa не готовы")

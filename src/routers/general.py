@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from src.common.errors import IndexAlreadyRunning
 from src.core.incident_vectorizer import IncidentVectorizer
 from src.interfaces.router import BaseRouter
-from src.models.request_models import IndexRequest, IndexResult
+from src.models.request_models import IndexResult
 from src.services.vespa_service import VespaService
 
 logger = logging.getLogger(__name__)
@@ -32,13 +32,13 @@ class GeneralRouter(BaseRouter):
             return {"status": "ok"}
 
         @router.post("/index")
-        def index(request: IndexRequest) -> IndexResult:
+        def index() -> IndexResult:
             try:
-                return self.vectorizer.run(full=request.full)
+                return self.vectorizer.run()
             except IndexAlreadyRunning:
                 raise HTTPException(409, "Индексация уже выполняется") from None
             except Exception as exc:
                 logger.error("Индексация прервана (%s)", type(exc).__name__)
-                raise HTTPException(502, "Индексация прервана; checkpoint не продвинут") from None
+                raise HTTPException(502, "Индексация прервана") from None
 
         return router

@@ -34,10 +34,10 @@ def test_get_uses_sdk_namespace_encoding_and_timeout(vespa):
     service, send = vespa
     send.return_value = response(200, {"fields": {"updated_at_jira": "now"}})
     assert isinstance(service.client, VespaSync)
-    assert service.get("index_checkpoint", "a/b ?") == {"updated_at_jira": "now"}
+    assert service.get("incident", "a/b ?") == {"updated_at_jira": "now"}
     request = send.call_args.args[0]
     assert request.method == "GET"
-    assert request.url == "http://vespa:8080/document/v1/incident/index_checkpoint/docid/a/b%20%3F"
+    assert request.url == "http://vespa:8080/document/v1/incident/incident/docid/a/b%20%3F"
     assert send.call_args.kwargs["timeout"] == 7
 
 
@@ -57,11 +57,11 @@ def test_missing_schema_is_failure(vespa, payload):
 
 def test_put_feeds_fields(vespa):
     service, send = vespa
-    send.return_value = response(200, {"id": "id:incident:index_checkpoint::stream"})
-    service.put("index_checkpoint", "stream", {"updated_at_jira": "now"})
+    send.return_value = response(200, {"id": "id:incident:incident::stream"})
+    service.put("incident", "stream", {"updated_at_jira": "now"})
     request = send.call_args.args[0]
     assert request.method == "POST"
-    assert request.url == "http://vespa:8080/document/v1/incident/index_checkpoint/docid/stream"
+    assert request.url == "http://vespa:8080/document/v1/incident/incident/docid/stream"
     assert json.loads(request.body) == {"fields": {"updated_at_jira": "now"}}
     assert send.call_args.kwargs["timeout"] == 7
 
@@ -74,13 +74,13 @@ def test_put_requires_confirmation(vespa, status, payload):
         service.put("incident", "test", {})
 
 
-def test_ready_checks_both_schemas(vespa):
+def test_ready_checks_all_schemas(vespa):
     service, send = vespa
     send.return_value = response(200, {"root": {}})
     service.ready()
     assert [json.loads(call.args[0].body) for call in send.call_args_list] == [
         {"yql": f"select * from {schema} where true", "hits": 0}
-        for schema in ("incident", "index_checkpoint")
+        for schema in ("incident", "confluence_page")
     ]
     assert all(call.kwargs["timeout"] == 7 for call in send.call_args_list)
 

@@ -1,8 +1,6 @@
 import httpx
 
 from src.services.jira_service import JiraService
-from src.services.jira_service import jql_with_updated_since
-from datetime import datetime, timezone
 
 
 def test_loads_all_comment_pages() -> None:
@@ -44,9 +42,3 @@ def test_search_pagination_and_empty_page():
         assert starts == [0, 1, 2]
     finally:
         service.close()
-
-
-def test_jql_preserves_ordering_and_no_checkpoint():
-    query = "project = P OR project = Q ORDER BY updated ASC"
-    assert jql_with_updated_since(query, None) == query
-    assert jql_with_updated_since(query, datetime(2026, 9, 18, tzinfo=timezone.utc)) == "(project = P OR project = Q) AND updated >= '2026-09-18 00:00' ORDER BY updated ASC"

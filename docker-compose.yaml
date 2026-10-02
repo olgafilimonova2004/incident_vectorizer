@@ -17,6 +17,8 @@ services:
   api-gateway:
     image: incident-vectorizer:local
     build: .
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: 
       - 8001:8001
     env_file: 

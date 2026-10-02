@@ -19,14 +19,14 @@ def dump_issue_main() -> None:
             print(json.dumps(page, ensure_ascii=False, indent=2))
 
 
-def index_main() -> None:
-    parser = argparse.ArgumentParser(description="Индексация Jira в Vespa")
-    parser.add_argument("--full", action="store_true", help="Обойти весь JQL без границы checkpoint")
-    args = parser.parse_args()
+def index_main(*, force: bool = False) -> None:
+    parser = argparse.ArgumentParser(description="Принудительная переиндексация Jira в Vespa" if force else "Индексация Jira в Vespa")
+    parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     container = initialize_container()
     try:
-        result = container.get(IncidentVectorizer).run(full=args.full)
+        vectorizer = container.get(IncidentVectorizer)
+        result = vectorizer.run(force=True) if force else vectorizer.run()
         print(result.model_dump_json())
         code = 1 if result.failed else 0
     except Exception as exc:
@@ -35,3 +35,51 @@ def index_main() -> None:
     finally:
         container.close()
     raise SystemExit(code)
+
+
+def confluence_index_main(*, force: bool = False) -> None:
+    from src.core.confluence_vectorizer import ConfluenceVectorizer
+
+    parser = argparse.ArgumentParser(description="Принудительная переиндексация Confluence в Vespa" if force else "Индексация Confluence в Vespa")
+    parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
+    container = initialize_container()
+    try:
+        vectorizer = container.get(ConfluenceVectorizer)
+        result = vectorizer.run(force=True) if force else vectorizer.run()
+        print(result.model_dump_json())
+        code = 1 if result.failed else 0
+    except Exception as exc:
+        logging.error("Индексация Confluence прервана (%s)", type(exc).__name__)
+        code = 1
+    finally:
+        container.close()
+    raise SystemExit(code)
+
+
+def confluence_dump_main() -> None:
+    from src.common.config import ConfluenceConfig
+    from src.services.confluence_service import ConfluenceService
+
+    parser = argparse.ArgumentParser(description="JSON страницы Confluence с body в формате text")
+    parser.add_argument("page_id")
+    args = parser.parse_args()
+    service = ConfluenceService(ConfluenceConfig())  # type: ignore[call-arg]
+    try:
+        page = service.get_records()
+        record = next((record for record in page.records if record.get("id") == args.page_id), None)
+        if record is None:
+            parser.exit(1, "Страница не найдена в выбранных пространствах Confluence\n")
+        print(json.dumps(record, ensure_ascii=False, indent=2))
+    except Exception as exc:
+        parser.exit(1, f"Не удалось получить страницу Confluence ({type(exc).__name__})\n")
+    finally:
+        service.close()
+
+
+def jira_index_force_main() -> None:
+    index_main(force=True)
+
+
+def confluence_index_force_main() -> None:
+    confluence_index_main(force=True)

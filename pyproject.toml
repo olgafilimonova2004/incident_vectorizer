@@ -18,7 +18,11 @@ dependencies = [
 dev = ["pytest>=8,<9", "ty"]
 
 [project.scripts]
+jira-index-force = "src.cli:jira_index_force_main"
+confluence-index-force = "src.cli:confluence_index_force_main"
 incident-vectorizer = "main:main"
+confluence-dump = "src.cli:confluence_dump_main"
+confluence-index = "src.cli:confluence_index_main"
 jira-index = "src.cli:index_main"
 jira-dump = "src.cli:dump_issue_main"
 

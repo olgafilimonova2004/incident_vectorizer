@@ -52,24 +52,24 @@ def pipeline(tmp_path):
 
 def test_first_repeat_metadata_text_and_model(pipeline):
     vectorizer, jira, embedder, vespa = pipeline
-    assert vectorizer.run() == IndexResult(processed=1, changed=1, checkpoint_advanced=True)
+    assert vectorizer.run() == IndexResult(processed=1, changed=1)
     assert vectorizer.run() == IndexResult(processed=1)
     assert embedder.embed_texts.call_count == 1
-    assert "updated >= '2026-09-17 09:55'" in jira.iter_issue_keys.call_args.args[0]
+    assert jira.iter_issue_keys.call_args.args[0] == vectorizer.config.jql
     jira.get_issue.return_value.fields.status.name = "Closed"
     assert vectorizer.run().changed == 1
     assert embedder.embed_texts.call_count == 1
     jira.get_issue.return_value.fields.description = "changed"
     assert vectorizer.run().changed == 1
     embedder.version = "v2"
-    assert vectorizer.run(full=True).changed == 1
+    assert vectorizer.run().changed == 1
     assert embedder.embed_texts.call_count == 3
     assert "updated >=" not in jira.iter_issue_keys.call_args.args[0]
-    assert len(vespa.docs) == 2
+    assert len(vespa.docs) == 1
 
 
 @pytest.mark.parametrize("failure", ["jira", "embedder", "vespa"])
-def test_failure_preserves_checkpoint_and_retries(pipeline, failure):
+def test_failure_preserves_document_and_retries(pipeline, failure):
     vectorizer, jira, embedder, vespa = pipeline
     vectorizer.run()
     before = deepcopy(vespa.docs)
@@ -82,11 +82,11 @@ def test_failure_preserves_checkpoint_and_retries(pipeline, failure):
     else:
         vespa.fail = True
     result = vectorizer.run()
-    assert result.failed == 1 and not result.checkpoint_advanced
+    assert result.failed == 1
     assert vespa.docs == before
     jira.get_comments.side_effect = embedder.embed_texts.side_effect = None
     vespa.fail = False
-    assert vectorizer.run().checkpoint_advanced
+    assert vectorizer.run().changed == 1
 
 
 def test_partial_failure_does_not_skip_older_ticket(pipeline):
@@ -96,13 +96,13 @@ def test_partial_failure_does_not_skip_older_ticket(pipeline):
     jira.get_issue.side_effect = [RuntimeError(), issue]
     result = vectorizer.run()
     assert (result.failed, result.changed) == (1, 1)
-    assert not any(schema == "index_checkpoint" for schema, _ in vespa.docs)
+    assert all(schema == "incident" for schema, _ in vespa.docs)
     jira.get_issue.side_effect = None
     vectorizer.run()
     assert "updated >=" not in jira.iter_issue_keys.call_args.args[0]
 
 
-def test_search_failure_after_success_does_not_checkpoint(pipeline):
+def test_search_failure_after_success_retries_full_selection(pipeline):
     vectorizer, jira, _, vespa = pipeline
     def keys(*args):
         yield "PROJ-1"
@@ -110,7 +110,7 @@ def test_search_failure_after_success_does_not_checkpoint(pipeline):
     jira.iter_issue_keys.side_effect = keys
     with pytest.raises(RuntimeError):
         vectorizer.run()
-    assert not any(schema == "index_checkpoint" for schema, _ in vespa.docs)
+    assert all(schema == "incident" for schema, _ in vespa.docs)
 
 
 def test_lock_rejects_parallel_run_and_releases(pipeline):
@@ -129,7 +129,8 @@ def test_http_statuses(pipeline):
     with TestClient(app) as client:
         assert client.get("/api/v1/ping").json() == "pong"
         assert client.get("/api/v1/ready").status_code == 200
-        assert client.post("/api/v1/index", json={}).json()["changed"] == 1
+        response = client.post("/api/v1/index")
+        assert response.json() == {"processed": 1, "changed": 1, "failed": 0}
         with index_lock(vectorizer.runtime.lock_file):
             assert client.post("/api/v1/index", json={}).status_code == 409
         vectorizer.repository.vespa.ready = Mock(side_effect=RuntimeError())
@@ -150,7 +151,7 @@ def test_embedder_rejects_invalid_response(data):
 
 
 def test_embedder_orders_and_batches():
-    service = EmbedderService(EmbedderConfig(dimensions=2, batch_size=2))
+    service = EmbedderService(EmbedderConfig(dimensions=2, batch_size=2, prefix="passage: "))
     requests = []
     def handle(request):
         import json
@@ -164,3 +165,18 @@ def test_embedder_orders_and_batches():
         assert requests[0]["input"] == ["passage: a", "passage: b"]
     finally:
         service.close()
+
+
+def test_force_reembeds_unchanged_tickets_and_preserves_on_failure(pipeline):
+    vectorizer, jira, embedder, vespa = pipeline
+    assert vectorizer.run().changed == 1
+    assert vectorizer.run().changed == 0
+    embedder.embed_texts.return_value = [[0.0, 1.0]]
+    assert vectorizer.run(force=True) == IndexResult(processed=1, changed=1)
+    assert embedder.embed_texts.call_count == 2
+    assert vespa.docs["incident", "PROJ-1"]["embedding"] == {"values": [0.0, 1.0]}
+    assert jira.iter_issue_keys.call_args.args[0] == vectorizer.config.jql
+    before = deepcopy(vespa.docs)
+    embedder.embed_texts.side_effect = RuntimeError()
+    assert vectorizer.run(force=True).failed == 1
+    assert vespa.docs == before

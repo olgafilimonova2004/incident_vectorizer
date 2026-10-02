@@ -9,7 +9,6 @@ class JiraConfig(BaseSettings):
     jira_url: AnyHttpUrl
     jira_token: SecretStr
     jql: str = "project = RKMI ORDER BY updated ASC"
-    overlap_seconds: int = Field(default=300, ge=0)
     page_size: int = Field(default=100, ge=1, le=1000)
 
 
@@ -24,7 +23,7 @@ class EmbedderConfig(BaseSettings):
     base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8000/v1")
     api_key: SecretStr = SecretStr("")
     model: str = ""
-    dimensions: int = Field(default=2560, gt=0)
+    dimensions: int = Field(default=2048, gt=0)
     prefix: str = ""
     batch_size: int = Field(default=32, gt=0)
     timeout: float = Field(default=120, gt=0)
@@ -33,3 +32,11 @@ class EmbedderConfig(BaseSettings):
 class RuntimeConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="INCIDENT_", env_file=".env", extra="ignore")
     lock_file: Path = Path("/tmp/incident-vectorizer/index.lock")
+
+
+class ConfluenceConfig(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="CONFLUENCE_INDEXER_", env_file=".env", extra="ignore")
+    base_url: AnyHttpUrl
+    space_key: str | None = None
+    page_size: int = Field(default=100, ge=1, le=1000)
+    timeout: float = Field(default=120, gt=0)

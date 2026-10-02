@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime
 from typing import Any
 
 import httpx
@@ -78,17 +77,3 @@ class JiraService:
             start_at += consumed
             if consumed == 0 or start_at >= page.total:
                 break
-
-
-def jql_with_updated_since(base_jql: str, since: datetime | None) -> str:
-    if since is None:
-        return base_jql
-    value = since.strftime("%Y-%m-%d %H:%M")
-    order_marker = " order by "
-    lower = base_jql.lower()
-    position = lower.rfind(order_marker)
-    if position >= 0:
-        query, ordering = base_jql[:position], base_jql[position:]
-    else:
-        query, ordering = base_jql, ""
-    return f"({query.strip()}) AND updated >= '{value}'{ordering}"
