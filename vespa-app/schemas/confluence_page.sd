@@ -33,6 +33,17 @@ schema confluence_page {
     }
     rank-profile weighted {
         inputs { query(q_embedding) tensor<float>(x[2048]) }
-        first-phase { expression: 0.5 * closeness(field, embedding) + 0.5 * bm25(text)}
+
+        first-phase { expression: closeness(field, embedding) }
+
+        function bm25_text() { expression: bm25(text) }         
+        function closeness_emb() { expression: closeness(field, embedding) }
+
+        global-phase {
+            expression: 0.5 * (closeness_emb + normalize_linear(bm25_text))
+            rerank-count: 100
+        }
+
+        match-features { closeness_emb bm25_text }
     }
 }
