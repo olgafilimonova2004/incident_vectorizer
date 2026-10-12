@@ -1,62 +1,35 @@
-from __future__ import annotations
-
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class JiraStatus(BaseModel):
-    name: str = ""
-
-
-class JiraIssueFields(BaseModel):
-    description: str | None = None
-    status: JiraStatus = Field(default_factory=JiraStatus)
-    updated: datetime
-
-
-class JiraIssue(BaseModel):
-    key: str
-    fields: JiraIssueFields
-
-
-class JiraAuthor(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    display_name: str = Field(default="Неизвестный автор", alias="displayName")
+from pydantic import BaseModel, Field
 
 
 class JiraComment(BaseModel):
     id: str
-    author: JiraAuthor = Field(default_factory=JiraAuthor)
+    author: str | None = None
     body: str | None = None
     created: datetime
 
 
-class JiraCommentPage(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    start_at: int = Field(alias="startAt")
-    max_results: int = Field(alias="maxResults")
-    total: int
-    comments: list[JiraComment] = Field(default_factory=list)
-
-
-class JiraSearchIssue(BaseModel):
-    key: str
+class JiraIssue(BaseModel):
+    key: str = Field(min_length=1)
+    description: str | None = None
+    status: str | None = None
+    updated_at: datetime
+    comments: list[JiraComment]
 
 
-class JiraSearchPage(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    start_at: int = Field(alias="startAt")
-    max_results: int = Field(alias="maxResults")
-    total: int
-    issues: list[JiraSearchIssue] = Field(default_factory=list)
+class JiraTasksPage(BaseModel):
+    count: int
+    total: int | None = None
+    jql: str
+    # Validate records individually so one malformed task does not stop indexing.
+    tasks: list[dict[str, Any]]
 
 
 class TicketDocument(BaseModel):
     ticket_id: str
+    url: str = ""
     text: str
     status: str
     updated_at_jira: datetime

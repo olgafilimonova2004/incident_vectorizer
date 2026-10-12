@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 
 from src.common.config import EmbedderConfig, VespaConfig
-from src.services.embedder_service import EmbedderService
+from src.clients.lm_client import LMClient
 
 
 def find_closest_ticket(
@@ -21,7 +21,7 @@ def find_closest_ticket(
     if not text.strip():
         raise ValueError("Description and comments must contain some text")
 
-    embedder = EmbedderService(embedder_config or EmbedderConfig())
+    embedder = LMClient(embedder_config or EmbedderConfig())
     try:
         vector = embedder.embed_texts([text])[0]
     finally:

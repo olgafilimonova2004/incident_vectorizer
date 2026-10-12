@@ -15,7 +15,7 @@ from src.core.confluence_vectorizer import ConfluenceVectorizer
 from src.models.confluence_models import ConfluenceRecordsPage
 from src.models.request_models import IndexResult
 from src.repositories.confluence_page_repository import ConfluencePageRepository
-from src.services.confluence_service import ConfluenceService
+from src.clients.confluence_client import ConfluenceClient
 from test_indexer import MemoryVespa
 
 
@@ -25,7 +25,7 @@ def page(records):
 
 @pytest.mark.parametrize("space", [None, "DOCS"])
 def test_service_contract(space):
-    service = ConfluenceService(ConfluenceConfig(base_url="http://manager", space_key=space))
+    service = ConfluenceClient(ConfluenceConfig(base_url="http://manager", space_key=space))
     def handle(request):
         assert request.url.path == "/api/v1/confluence/records"
         expected = {"content_type": "page", "body_format": "text", "page_size": "100"}
@@ -151,14 +151,14 @@ def test_cli(monkeypatch, failed, error, code):
 @pytest.mark.parametrize("mode", ["found", "missing", "error"])
 def test_dump_raw_page(monkeypatch, capsys, mode):
     import json
-    import src.services.confluence_service as module
+    import src.clients.confluence_client as module
     record = {"id": "42", "title": "Название", "body": "  Text\n", "body_format": "text", "url": "https://confluence/page/42"}
     service = Mock()
     service.get_records.return_value = page([{"id": "other"}, record] if mode == "found" else [])
     if mode == "error":
         service.get_records.side_effect = RuntimeError("private response")
     monkeypatch.setenv("CONFLUENCE_INDEXER_BASE_URL", "http://manager")
-    monkeypatch.setattr(module, "ConfluenceService", lambda config: service)
+    monkeypatch.setattr(module, "ConfluenceClient", lambda config: service)
     monkeypatch.setattr("sys.argv", ["confluence-dump", "42"])
     if mode == "found":
         cli.confluence_dump_main()
@@ -186,3 +186,13 @@ def test_force_reembeds_unchanged_pages_and_preserves_on_failure(pipeline):
     embedder.embed_texts.side_effect = RuntimeError()
     assert vectorizer.run(force=True).failed == 1
     assert vespa.docs == before
+
+
+def test_url_change_reuses_embedding(pipeline):
+    vectorizer, source, embedder, vespa = pipeline
+    vectorizer.run()
+    assert vespa.docs["confluence_page", "42"]["url"] == ""
+    source.get_records.return_value.records[0]["url"] = "/display/DOC/page"
+    assert vectorizer.run().changed == 1
+    assert vespa.docs["confluence_page", "42"]["url"] == "/display/DOC/page"
+    assert embedder.embed_texts.call_count == 1

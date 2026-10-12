@@ -8,7 +8,7 @@ from src.common.config import EmbedderConfig
 from src.common.errors import DependencyError
 
 
-class EmbedderService:
+class LMClient:
     def __init__(self, config: EmbedderConfig):
         self.config = config
         headers = {}

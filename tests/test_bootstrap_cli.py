@@ -10,7 +10,7 @@ from src.models.request_models import IndexResult
 
 def test_bootstrap_and_shutdown(monkeypatch):
     monkeypatch.setenv("JIRA_INDEXER_JIRA_URL", "https://jira.test")
-    monkeypatch.setenv("JIRA_INDEXER_JIRA_TOKEN", "secret")
+    monkeypatch.setenv("JIRA_INDEXER_BASE_URL", "http://manager")
     with TestClient(create_app()) as client:
         assert client.get("/api/v1/ping").json() == "pong"
         assert "/api/v1/index" in client.get("/openapi.json").json()["paths"]
@@ -64,3 +64,34 @@ def test_force_commands(monkeypatch, capsys, entrypoint, failed, error, code):
     container.close.assert_called_once()
     if not error:
         assert '"processed":1' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mode", ["found", "missing", "error"])
+def test_jira_dump_uses_manager(monkeypatch, capsys, mode):
+    import json
+    from src.models.jira_models import JiraTasksPage
+    from unittest.mock import MagicMock
+
+    record = {"key": "PROJ-1", "description": "*raw*", "comments": []}
+    service = MagicMock()
+    service.__enter__.return_value = service
+    service.get_tasks.return_value = JiraTasksPage(
+        count=1 if mode == "found" else 0, jql='key = "PROJ-1"',
+        tasks=[record] if mode == "found" else [],
+    )
+    if mode == "error":
+        service.get_tasks.side_effect = RuntimeError("private")
+    monkeypatch.setenv("JIRA_INDEXER_BASE_URL", "http://manager")
+    monkeypatch.setenv("JIRA_INDEXER_JIRA_URL", "http://jira")
+    monkeypatch.setattr(cli, "JiraClient", lambda config: service)
+    monkeypatch.setattr("sys.argv", ["jira-dump", "PROJ-1"])
+    if mode == "found":
+        cli.dump_issue_main()
+        assert json.loads(capsys.readouterr().out) == record
+    else:
+        with pytest.raises(SystemExit) as exc:
+            cli.dump_issue_main()
+        assert exc.value.code == 1
+        assert "private" not in capsys.readouterr().err
+    service.get_tasks.assert_called_once_with('key = "PROJ-1"', 100)
+    service.__exit__.assert_called_once()

@@ -1,5 +1,6 @@
 schema confluence_page {
     document confluence_page {
+        field url type string { indexing: summary }
         field page_id type string {
             indexing: summary | attribute
             attribute: fast-search

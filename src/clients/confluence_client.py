@@ -4,7 +4,7 @@ from src.common.config import ConfluenceConfig
 from src.models.confluence_models import ConfluenceRecordsPage
 
 
-class ConfluenceService:
+class ConfluenceClient:
     def __init__(self, config: ConfluenceConfig):
         self.config = config
         self.client = httpx.Client(

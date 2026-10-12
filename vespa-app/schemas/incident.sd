@@ -1,5 +1,6 @@
 schema incident {
     document incident {
+        field url type string { indexing: summary }
         field ticket_id type string {
             indexing: summary | attribute
             attribute: fast-search

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class ConfluenceRecord(BaseModel):
     id: str = Field(min_length=1)
     body: str | None = None
+    url: str | None = None
     updated_at: datetime | None = None
 
 
@@ -20,6 +21,7 @@ class ConfluenceRecordsPage(BaseModel):
 
 
 class ConfluenceDocument(BaseModel):
+    url: str = ""
     page_id: str
     text: str
     content_hash: str

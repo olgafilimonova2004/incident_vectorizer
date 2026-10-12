@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class JiraConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="JIRA_INDEXER_", env_file=".env", extra="ignore")
     jira_url: AnyHttpUrl
-    jira_token: SecretStr
+    base_url: AnyHttpUrl
+    timeout: float = Field(default=120, gt=0)
     jql: str = "project = RKMI ORDER BY updated ASC"
     page_size: int = Field(default=100, ge=1, le=1000)
 

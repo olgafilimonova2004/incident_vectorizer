@@ -1,9 +1,9 @@
 # Incident Vectorizer
 
-Индексатор Jira Server/Data Center REST API v2 и Confluence через atlassian-manager → внешний embedder → Vespa.
+Индексатор Jira и Confluence через atlassian-manager → внешний embedder → Vespa.
 Логика выгрузки и нормализации перенесена из `incident_vector_db`, структура
 приложения соответствует `vectorizer`: FastAPI, Dishka, `src/common`, `core`,
-`services`, `repositories`, `models`, `routers`, `interfaces`, bootstrap/application.
+`clients`, `services`, `repositories`, `models`, `routers`, `interfaces`, bootstrap/application.
 Python 3.11+, uv, Docker с Compose v2. PostgreSQL не используется.
 
 ## Настройка
@@ -13,7 +13,10 @@ cp .env.example .env
 uv sync --locked
 ```
 
-Заполните Jira URL, Bearer token, JQL и адрес OpenAI-совместимого embedder.
+Заполните `JIRA_INDEXER_BASE_URL` (адрес atlassian-manager), публичный
+`JIRA_INDEXER_JIRA_URL` для ссылок, JQL и адрес OpenAI-совместимого embedder.
+Jira-токен хранится только в atlassian-manager. `JIRA_INDEXER_TIMEOUT`
+по умолчанию равен 120 секундам и ограничивает ожидание полной выгрузки.
 `.env` автоматически читается приложением; не загружайте его через `source`:
 JQL содержит пробелы. Секреты не добавляются в Git.
 
@@ -37,7 +40,7 @@ curl --fail http://localhost:8001/api/v1/ready
 
 Vespa хранит данные в именованном volume. API публикуется на порту `8001` всех интерфейсов.
 Vespa публикует порты 8083 (HTTP) и 19072 (config server); API имеет выход
-к Jira и embedder. Для embedder на хосте доступно имя `host.docker.internal`;
+к atlassian-manager и embedder. Для embedder на хосте доступно имя `host.docker.internal`;
 endpoint на хосте должен принимать соединения с Docker bridge.
 Образ Vespa закреплён на major 8; для воспроизводимого production-развёртывания
 закрепите проверенный digest вашего окружения.
@@ -49,7 +52,7 @@ docker compose exec api-gateway jira-index
 docker compose exec api-gateway jira-dump PROJ-123
 ```
 
-`jira-dump` выводит исходный JSON тикета и все страницы комментариев;
+`jira-dump` выводит JSON задачи из manager с обязательным массивом `comments`;
 ему нужны только настройки Jira. Вывод содержит данные тикета.
 
 ## Локальная разработка
@@ -130,9 +133,9 @@ cat incident.txt | uv run python find_closest_ticket.py - --vespa-url http://loc
 ## Данные и повторные запуски
 
 Один тикет — один документ `incident`, ID равен Jira key. Хранятся `ticket_id`,
-`text`, `status`, `content_hash`, `updated_at_jira`, `updated_at_db`, `embedding`
+`url`, `text`, `status`, `content_hash`, `updated_at_jira`, `updated_at_db`, `embedding`
 и `embedding_model_version`. Текст содержит описание и все комментарии,
-отсортированные по времени создания и ID. Формат и SHA-256 сохранены из исходника.
+отсортированные по времени создания и ID. SHA-256 вычисляется по очищенному тексту.
 Даты хранятся в ISO 8601 с часовым поясом.
 
 При неизменившемся тексте и конфигурации embedder существующий вектор сохраняется.
@@ -278,3 +281,28 @@ docker compose exec api-gateway confluence-index-force
 Успешная принудительная запись увеличивает `changed`. Общая блокировка,
 обработка ошибок и коды выхода совпадают с обычными командами; ошибка embedder
 сохраняет предыдущий документ. Документы за пределами выборки не удаляются.
+
+## Клиенты и обновление схем
+
+`JiraClient` получает задачи и все комментарии одним запросом
+`GET /api/v1/jira/tasks?jql=...&page_size=...`. Пагинацию Jira выполняет manager;
+его ответ должен содержать `comments` у каждой задачи (пустой массив допустим).
+Описание и комментарии очищаются от Jira wiki-разметки в векторизаторе.
+`ConfluenceClient` использует `/api/v1/confluence/records` с `body_format=text`.
+`LMClient` сохраняет прежний HTTP-протокол получения эмбеддингов.
+
+Поле `url` в обеих схемах Vespa возвращается в summary. Для Jira это
+`{JIRA_INDEXER_JIRA_URL}/browse/{key}`, для Confluence — исходный `url` manager
+(в том числе относительный); отсутствие ссылки Confluence записывается как `""`.
+Изменение ссылки не требует нового эмбеддинга.
+
+Сначала обновите atlassian-manager, затем разверните схемы Vespa и обновите
+векторизатор. Обычный проход индексации заполнит URL существующих документов;
+изменившийся после очистки текст получит новый эмбеддинг автоматически.
+
+Локальные проверки без внешних сервисов:
+
+```bash
+uv run pytest --ignore=tests/test_integration.py
+uv run ty check src
+```

@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 
 from src.models.confluence_models import ConfluenceDocument
-from src.services.embedder_service import EmbedderService
+from src.clients.lm_client import LMClient
 from src.services.vespa_service import VespaService
 
 
 class ConfluencePageRepository:
-    def __init__(self, vespa: VespaService, embedder: EmbedderService):
+    def __init__(self, vespa: VespaService, embedder: LMClient):
         self.vespa = vespa
         self.embedder = embedder
 

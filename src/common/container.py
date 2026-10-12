@@ -2,14 +2,14 @@ from collections.abc import Iterator
 
 from dishka import Provider, Scope, make_container, provide
 
+from src.clients.confluence_client import ConfluenceClient
+from src.clients.jira_client import JiraClient
+from src.clients.lm_client import LMClient
 from src.common.config import ConfluenceConfig, EmbedderConfig, JiraConfig, RuntimeConfig, VespaConfig
 from src.core.confluence_vectorizer import ConfluenceVectorizer
-from src.services.confluence_service import ConfluenceService
 from src.core.incident_vectorizer import IncidentVectorizer
-from src.repositories.ticket_repository import TicketRepository
 from src.repositories.confluence_page_repository import ConfluencePageRepository
-from src.services.embedder_service import EmbedderService
-from src.services.jira_service import JiraService
+from src.repositories.ticket_repository import TicketRepository
 from src.services.vespa_service import VespaService
 
 
@@ -25,8 +25,8 @@ class AppProvider(Provider):
         return RuntimeConfig()
 
     @provide
-    def jira(self, config: JiraConfig) -> Iterator[JiraService]:
-        with JiraService(str(config.jira_url), config.jira_token.get_secret_value()) as service:
+    def jira(self, config: JiraConfig) -> Iterator[JiraClient]:
+        with JiraClient(config) as service:
             yield service
 
     @provide
@@ -38,16 +38,16 @@ class AppProvider(Provider):
             service.close()
 
     @provide
-    def embedder(self) -> Iterator[EmbedderService]:
-        service = EmbedderService(EmbedderConfig())
+    def embedder(self) -> Iterator[LMClient]:
+        service = LMClient(EmbedderConfig())
         try:
             yield service
         finally:
             service.close()
 
     @provide
-    def confluence(self) -> Iterator[ConfluenceService]:
-        service = ConfluenceService(ConfluenceConfig())  # type: ignore[call-arg]
+    def confluence(self) -> Iterator[ConfluenceClient]:
+        service = ConfluenceClient(ConfluenceConfig())  # type: ignore[call-arg]
         try:
             yield service
         finally:

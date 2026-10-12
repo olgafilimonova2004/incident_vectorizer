@@ -1,11 +1,12 @@
 import argparse
 import json
 import logging
+import re
 
+from src.clients.jira_client import JiraClient
 from src.common.config import JiraConfig
 from src.common.container import initialize_container
 from src.core.incident_vectorizer import IncidentVectorizer
-from src.services.jira_service import JiraService
 
 
 def dump_issue_main() -> None:
@@ -13,10 +14,16 @@ def dump_issue_main() -> None:
     parser.add_argument("key")
     args = parser.parse_args()
     settings = JiraConfig()  # type: ignore[call-arg]
-    with JiraService(str(settings.jira_url), settings.jira_token.get_secret_value()) as jira:
-        print(json.dumps(jira.get_issue_raw(args.key), ensure_ascii=False, indent=2))
-        for page in jira.iter_comment_pages_raw(args.key, settings.page_size):
-            print(json.dumps(page, ensure_ascii=False, indent=2))
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*-[0-9]+", args.key):
+        parser.error("Некорректный ключ Jira")
+    with JiraClient(settings) as jira:
+        try:
+            page = jira.get_tasks(f'key = "{args.key}"', settings.page_size)
+            if not page.tasks:
+                parser.exit(1, "Тикет не найден\n")
+            print(json.dumps(page.tasks[0], ensure_ascii=False, indent=2))
+        except Exception as exc:
+            parser.exit(1, f"Не удалось получить тикет ({type(exc).__name__})\n")
 
 
 def index_main(*, force: bool = False) -> None:
@@ -59,12 +66,12 @@ def confluence_index_main(*, force: bool = False) -> None:
 
 def confluence_dump_main() -> None:
     from src.common.config import ConfluenceConfig
-    from src.services.confluence_service import ConfluenceService
+    from src.clients.confluence_client import ConfluenceClient
 
     parser = argparse.ArgumentParser(description="JSON страницы Confluence с body в формате text")
     parser.add_argument("page_id")
     args = parser.parse_args()
-    service = ConfluenceService(ConfluenceConfig())  # type: ignore[call-arg]
+    service = ConfluenceClient(ConfluenceConfig())  # type: ignore[call-arg]
     try:
         page = service.get_records()
         record = next((record for record in page.records if record.get("id") == args.page_id), None)

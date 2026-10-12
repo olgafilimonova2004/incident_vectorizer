@@ -1,18 +1,18 @@
 import hashlib
 import logging
 
+from src.clients.confluence_client import ConfluenceClient
 from src.common.config import RuntimeConfig
 from src.common.locking import index_lock
 from src.models.confluence_models import ConfluenceDocument, ConfluenceRecord
 from src.models.request_models import IndexResult
 from src.repositories.confluence_page_repository import ConfluencePageRepository
-from src.services.confluence_service import ConfluenceService
 
 logger = logging.getLogger(__name__)
 
 
 class ConfluenceVectorizer:
-    def __init__(self, confluence: ConfluenceService, repository: ConfluencePageRepository, runtime: RuntimeConfig):
+    def __init__(self, confluence: ConfluenceClient, repository: ConfluencePageRepository, runtime: RuntimeConfig):
         self.confluence, self.repository, self.runtime = confluence, repository, runtime
 
     def run(self, *, force: bool = False) -> IndexResult:
@@ -28,6 +28,7 @@ class ConfluenceVectorizer:
                         raise ValueError("Empty Confluence body")
                     document = ConfluenceDocument(
                         page_id=record.id,
+                        url=record.url or "",
                         text=record.body,
                         content_hash=hashlib.sha256(record.body.encode("utf-8")).hexdigest(),
                         updated_at_confluence=record.updated_at.isoformat() if record.updated_at else "",
