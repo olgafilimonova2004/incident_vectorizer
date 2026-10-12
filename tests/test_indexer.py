@@ -182,6 +182,13 @@ def test_force_reembeds_unchanged_tickets_and_preserves_on_failure(pipeline):
     assert vespa.docs == before
 
 
+def test_missing_jira_updated_at_is_indexed(pipeline):
+    vectorizer, jira, _, vespa = pipeline
+    jira.get_tasks.return_value.tasks[0]["updated_at"] = None
+    assert vectorizer.run() == IndexResult(processed=1, changed=1)
+    assert vespa.docs["incident", "PROJ-1"]["updated_at_jira"] == ""
+
+
 def test_url_change_reuses_embedding(pipeline):
     vectorizer, jira, embedder, vespa = pipeline
     vectorizer.run()

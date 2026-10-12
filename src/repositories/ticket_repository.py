@@ -13,7 +13,7 @@ class TicketRepository:
     def upsert(self, document: TicketDocument, *, force: bool = False) -> bool:
         old = None if force else self.vespa.get("incident", document.ticket_id)
         fields = document.model_dump(mode="json")
-        fields["updated_at_jira"] = document.updated_at_jira.isoformat()
+        fields["updated_at_jira"] = document.updated_at_jira.isoformat() if document.updated_at_jira else ""
         same_vector = bool(old and old.get("content_hash") == document.content_hash and old.get("embedding_model_version") == self.embedder.version and old.get("embedding"))
         if same_vector and old and all(old.get(key) == value for key, value in fields.items()):
             return False

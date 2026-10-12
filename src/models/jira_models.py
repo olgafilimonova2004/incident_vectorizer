@@ -15,7 +15,7 @@ class JiraIssue(BaseModel):
     key: str = Field(min_length=1)
     description: str | None = None
     status: str | None = None
-    updated_at: datetime
+    updated_at: datetime | None = None
     comments: list[JiraComment]
 
 
@@ -32,5 +32,5 @@ class TicketDocument(BaseModel):
     url: str = ""
     text: str
     status: str
-    updated_at_jira: datetime
+    updated_at_jira: datetime | None
     content_hash: str
