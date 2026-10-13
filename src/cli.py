@@ -57,6 +57,7 @@ def confluence_index_main(*, force: bool = False) -> None:
         print(result.model_dump_json())
         code = 1 if result.failed else 0
     except Exception as exc:
+        logging.exception("Индексация Confluence прервана (%s)", type(exc).__name__)
         logging.error("Индексация Confluence прервана (%s)", type(exc).__name__)
         code = 1
     finally:
