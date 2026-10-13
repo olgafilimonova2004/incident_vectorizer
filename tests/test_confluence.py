@@ -107,12 +107,56 @@ def test_mapping_repeat_metadata_text_model(pipeline):
     assert len(vespa.docs) == 1
 
 
+def test_title_mapping_change_and_repeat(pipeline):
+    vectorizer, source, embedder, vespa = pipeline
+    record = source.get_records.return_value.records[0]
+    record["title"] = "  Название страницы  "
+    text = f"{record['title']}\n{record['body']}"
+    assert vectorizer.run() == IndexResult(processed=1, changed=1)
+    stored = vespa.docs["confluence_page", "42"]
+    assert stored["text"] == text
+    assert stored["content_hash"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    embedder.embed_texts.assert_called_once_with([text])
+    before = deepcopy(vespa.docs)
+    assert vectorizer.run() == IndexResult(processed=1)
+    assert vespa.docs == before
+    assert embedder.embed_texts.call_count == 1
+    record["title"] = "Новое название"
+    assert vectorizer.run() == IndexResult(processed=1, changed=1)
+    changed_text = f"{record['title']}\n{record['body']}"
+    assert vespa.docs["confluence_page", "42"]["text"] == changed_text
+    assert vespa.docs["confluence_page", "42"]["content_hash"] == hashlib.sha256(changed_text.encode("utf-8")).hexdigest()
+    assert embedder.embed_texts.call_count == 2
+    embedder.embed_texts.assert_called_with([changed_text])
+
+
+@pytest.mark.parametrize("title", [None, "", " \n"])
+def test_empty_title_preserves_body(pipeline, title):
+    vectorizer, source, embedder, vespa = pipeline
+    record = source.get_records.return_value.records[0]
+    record["title"] = title
+    assert vectorizer.run() == IndexResult(processed=1, changed=1)
+    assert vespa.docs["confluence_page", "42"]["text"] == record["body"]
+    assert vespa.docs["confluence_page", "42"]["content_hash"] == hashlib.sha256(record["body"].encode("utf-8")).hexdigest()
+    embedder.embed_texts.assert_called_once_with([record["body"]])
+
+
+def test_existing_body_only_document_updates_with_title(pipeline):
+    vectorizer, source, embedder, vespa = pipeline
+    assert vectorizer.run().changed == 1
+    record = source.get_records.return_value.records[0]
+    record["title"] = "Название"
+    assert vectorizer.run().changed == 1
+    assert vespa.docs["confluence_page", "42"]["text"] == f"Название\n{record['body']}"
+    assert embedder.embed_texts.call_count == 2
+
+
 @pytest.mark.parametrize("body", [None, "", " \n"])
 def test_empty_body_preserves_document_and_continues(pipeline, body):
     vectorizer, source, _, vespa = pipeline
     vectorizer.run()
     before = deepcopy(vespa.docs["confluence_page", "42"])
-    source.get_records.return_value = page([{"id": "42", "body": body}, {"id": "43", "body": "valid"}])
+    source.get_records.return_value = page([{"id": "42", "title": "Название", "body": body}, {"id": "43", "body": "valid"}])
     assert vectorizer.run() == IndexResult(processed=2, changed=1, failed=1)
     assert vespa.docs["confluence_page", "42"] == before
 

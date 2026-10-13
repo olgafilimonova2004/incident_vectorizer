@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class ConfluenceRecord(BaseModel):
     id: str = Field(min_length=1)
+    title: str | None = None
     body: str | None = None
     url: str | None = None
     updated_at: datetime | None = None

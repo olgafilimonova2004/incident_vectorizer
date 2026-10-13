@@ -29,11 +29,12 @@ class ConfluenceVectorizer:
                     record = ConfluenceRecord.model_validate(raw)
                     if record.body is None or not record.body.strip():
                         raise ValueError("Empty Confluence body")
+                    text = f"{record.title}\n{record.body}" if record.title and record.title.strip() else record.body
                     document = ConfluenceDocument(
                         page_id=record.id,
                         url=record.url or "",
-                        text=record.body,
-                        content_hash=hashlib.sha256(record.body.encode("utf-8")).hexdigest(),
+                        text=text,
+                        content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
                         updated_at_confluence=record.updated_at.isoformat() if record.updated_at else "",
                     )
                     result.changed += int(self.repository.upsert(document, force=force))
