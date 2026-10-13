@@ -38,6 +38,7 @@ class RuntimeConfig(BaseSettings):
 class ConfluenceConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CONFLUENCE_INDEXER_", env_file=".env", extra="ignore")
     base_url: AnyHttpUrl
+    excluded_page_ids: set[str] = Field(default_factory=set)
     space_key: str | None = None
     page_size: int = Field(default=100, ge=1, le=1000)
     timeout: float = Field(default=120, gt=0)

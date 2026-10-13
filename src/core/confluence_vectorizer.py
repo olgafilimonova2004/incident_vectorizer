@@ -23,6 +23,9 @@ class ConfluenceVectorizer:
             for raw in page.records:
                 result.processed += 1
                 try:
+                    if raw.get("id") in self.confluence.config.excluded_page_ids:
+                        logger.info("Skipping excluded Confluence page %s", raw["id"])
+                        continue
                     record = ConfluenceRecord.model_validate(raw)
                     if record.body is None or not record.body.strip():
                         raise ValueError("Empty Confluence body")

@@ -47,12 +47,39 @@ def test_service_contract(space):
 @pytest.fixture
 def pipeline(tmp_path):
     source = Mock()
+    source.config = ConfluenceConfig(base_url="http://manager", excluded_page_ids=set(), _env_file=None)
     source.get_records.return_value = page([{"id": "42", "body": "  Main\r\ntext! \n", "updated_at": "2026-09-30T12:00:00Z"}])
     embedder = Mock(version="v1")
     embedder.embed_texts.return_value = [[1.0] + [0.0] * 2047]
     vespa = MemoryVespa()
     vectorizer = ConfluenceVectorizer(source, ConfluencePageRepository(vespa, embedder), RuntimeConfig(lock_file=tmp_path / "index.lock"))
     return vectorizer, source, embedder, vespa
+
+
+def test_excluded_page_ids_config(monkeypatch):
+    monkeypatch.delenv("CONFLUENCE_INDEXER_EXCLUDED_PAGE_IDS", raising=False)
+    assert ConfluenceConfig(base_url="http://manager", _env_file=None).excluded_page_ids == set()
+    monkeypatch.setenv("CONFLUENCE_INDEXER_EXCLUDED_PAGE_IDS", '["29262471"]')
+    assert ConfluenceConfig(base_url="http://manager", _env_file=None).excluded_page_ids == {"29262471"}
+
+
+@pytest.mark.parametrize("force", [False, True])
+@pytest.mark.parametrize("body", ["excluded text", None, "", " \n"])
+def test_excluded_page_never_reaches_repository(pipeline, force, body, caplog):
+    vectorizer, source, embedder, vespa = pipeline
+    source.config.excluded_page_ids = {"29262471"}
+    source.get_records.return_value = page([
+        {"id": "29262471", "body": body},
+        {"id": "42", "body": "valid"},
+    ])
+    vectorizer.repository.upsert = Mock(wraps=vectorizer.repository.upsert)
+    with caplog.at_level("INFO"):
+        assert vectorizer.run(force=force) == IndexResult(processed=2, changed=1)
+    vectorizer.repository.upsert.assert_called_once()
+    assert vectorizer.repository.upsert.call_args.args[0].page_id == "42"
+    assert ("confluence_page", "29262471") not in vespa.docs
+    embedder.embed_texts.assert_called_once()
+    assert "Skipping excluded Confluence page 29262471" in caplog.text
 
 
 def test_mapping_repeat_metadata_text_model(pipeline):

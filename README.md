@@ -191,6 +191,7 @@ INCIDENT_TEST_VESPA_URL=http://localhost:8083 uv run pytest -q tests/test_integr
 | --- | --- |
 | `CONFLUENCE_INDEXER_BASE_URL` | Обязательный URL |
 | `CONFLUENCE_INDEXER_SPACE_KEY` | Все доступные пространства |
+| `CONFLUENCE_INDEXER_EXCLUDED_PAGE_IDS` | `[]`, JSON-массив ID исключённых страниц |
 | `CONFLUENCE_INDEXER_PAGE_SIZE` | 100, диапазон 1–1000 |
 | `CONFLUENCE_INDEXER_TIMEOUT` | 120 секунд |
 
@@ -220,6 +221,32 @@ embedder, что и для Jira. При неизменных SHA-256 текст�
 Ответ использует те же счётчики, что Jira: `processed`, `changed`, `failed`.
 Частичный сбой — HTTP 200 и CLI 1; сбой получения ответа — HTTP 502 и CLI 1;
 занятый общий с Jira lock — HTTP 409 и CLI 1. Удаления не синхронизируются.
+
+Чтобы исключить страницу из обычной и принудительной индексации, добавьте в `.env`:
+
+```dotenv
+CONFLUENCE_INDEXER_EXCLUDED_PAGE_IDS=["29262471"]
+```
+
+Исключённые страницы учитываются в `processed`, но не в `changed` и `failed`.
+Они пропускаются до проверки body и обращения к репозиторию. Исключение действует
+только на указанные ID, не на дочерние страницы; atlassian-manager по-прежнему
+может получать и возвращать их содержимое.
+
+Для Compose пересоберите и пересоздайте индексатор: `docker compose up -d --build api-gateway`.
+Для запуска через uv перезапустите API с обновлённым кодом и настройками.
+Дождитесь завершения ранее запущенной индексации, затем удалите существующий
+документ (namespace — `incident`, схема — `confluence_page`):
+
+```bash
+curl --fail-with-body -X DELETE \
+  http://localhost:8083/document/v1/incident/confluence_page/docid/29262471
+curl -i http://localhost:8083/document/v1/incident/confluence_page/docid/29262471
+```
+
+Адрес выше — порт Vespa на Docker-хосте; для другого развёртывания используйте
+его адрес Vespa. После удаления GET должен вернуть HTTP 404. Повторная
+индексация с настроенным исключением не должна восстановить документ.
 
 После обновления кода повторно выполните `vespa-deploy prepare /app` и
 `vespa-deploy activate` из инструкции выше, затем перезапустите API.
